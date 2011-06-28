@@ -1774,7 +1774,11 @@ int device_browse_primary(struct btd_device *device, DBusConnection *conn,
 				device, NULL, NULL,
 				BT_IO_OPT_SOURCE_BDADDR, &src,
 				BT_IO_OPT_DEST_BDADDR, &device->bdaddr,
+#if 0
 				BT_IO_OPT_CID, ATT_CID,
+#else
+				BT_IO_OPT_PSM, ATT_PSM,
+#endif
 				BT_IO_OPT_SEC_LEVEL, sec_level,
 				BT_IO_OPT_INVALID);
 

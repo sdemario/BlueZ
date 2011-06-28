@@ -1597,10 +1597,11 @@ static DBusMessage *create_device(DBusConnection *conn,
 	device = create_device_internal(conn, adapter, address, &err);
 	if (!device)
 		goto failed;
-
+#if 0
 	if (device_get_type(device) != DEVICE_TYPE_LE)
 		err = device_browse_sdp(device, conn, msg, NULL, FALSE);
 	else
+#endif
 		err = device_browse_primary(device, conn, msg, FALSE);
 
 	if (err < 0) {
