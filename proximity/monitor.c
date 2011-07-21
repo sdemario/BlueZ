@@ -62,6 +62,7 @@ struct monitor {
 	struct att_range *immediate;
 	struct enabled enabled;
 	char *linklosslevel;		/* Link Loss Alert Level */
+	char *fallbacklevel;		/* Immediate fallback alert level */
 	char *immediatelevel;		/* Immediate Alert Level */
 	char *signallevel;		/* Path Loss RSSI level */
 	uint16_t linklosshandle;	/* Link Loss Characteristic Value Handle */
@@ -248,6 +249,16 @@ static void discover_immediate_handle(struct monitor *monitor)
 					&uuid, immediate_handle_cb, monitor);
 }
 
+static void write_immediate_alert(struct monitor *monitor)
+{
+	uint8_t value = str2level(monitor->immediatelevel);
+
+	gatt_write_cmd(monitor->attrib, monitor->immediatehandle, &value, 1,
+								NULL, NULL);
+	g_free(monitor->fallbacklevel);
+	monitor->fallbacklevel = NULL;
+}
+
 static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 {
 	struct monitor *monitor = user_data;
@@ -260,9 +271,11 @@ static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
 	if (monitor->enabled.pathloss)
 		read_tx_power(monitor);
 
-	if (monitor->immediatehandle == 0 &&
-			(monitor->enabled.pathloss || monitor->enabled.findme))
-		discover_immediate_handle(monitor);
+	if (monitor->immediatehandle == 0) {
+		if(monitor->enabled.pathloss || monitor->enabled.findme)
+			discover_immediate_handle(monitor);
+	} else if (monitor->fallbacklevel)
+		write_immediate_alert(monitor);
 }
 
 static void attio_disconnected_cb(gpointer user_data)
@@ -321,7 +334,10 @@ static DBusMessage *set_immediate_alert(DBusConnection *conn, DBusMessage *msg,
 	if (g_strcmp0(monitor->immediatelevel, level) == 0)
 		return dbus_message_new_method_return(msg);
 
-	g_free(monitor->immediatelevel);
+	/* Previous Immediate Alert level if connection/write fails */
+	g_free(monitor->fallbacklevel);
+	monitor->fallbacklevel = monitor->immediatelevel;
+
 	monitor->immediatelevel = g_strdup(level);
 
 	emit_property_changed(conn, path, PROXIMITY_INTERFACE,
