@@ -57,6 +57,7 @@
 struct monitor {
 	struct btd_device *device;
 	GAttrib *attrib;
+	DBusConnection *conn;
 	struct att_range *linkloss;
 	struct att_range *txpower;
 	struct att_range *immediate;
@@ -249,14 +250,25 @@ static void discover_immediate_handle(struct monitor *monitor)
 					&uuid, immediate_handle_cb, monitor);
 }
 
+static void immediate_written(gpointer user_data)
+{
+	struct monitor *monitor = user_data;
+	const gchar *path = device_get_path(monitor->device);
+
+	g_free(monitor->fallbacklevel);
+	monitor->fallbacklevel = NULL;
+
+	emit_property_changed(monitor->conn, path, PROXIMITY_INTERFACE,
+				"ImmediateAlertLevel",
+				DBUS_TYPE_STRING, &monitor->immediatelevel);
+}
+
 static void write_immediate_alert(struct monitor *monitor)
 {
 	uint8_t value = str2level(monitor->immediatelevel);
 
 	gatt_write_cmd(monitor->attrib, monitor->immediatehandle, &value, 1,
-								NULL, NULL);
-	g_free(monitor->fallbacklevel);
-	monitor->fallbacklevel = NULL;
+							immediate_written, monitor);
 }
 
 static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
@@ -326,7 +338,6 @@ static DBusMessage *set_immediate_alert(DBusConnection *conn, DBusMessage *msg,
 						const char *level, void *data)
 {
 	struct monitor *monitor = data;
-	const gchar *path = device_get_path(monitor->device);
 
 	if (!level_is_valid(level))
 		return btd_error_invalid_args(msg);
@@ -339,10 +350,6 @@ static DBusMessage *set_immediate_alert(DBusConnection *conn, DBusMessage *msg,
 	monitor->fallbacklevel = monitor->immediatelevel;
 
 	monitor->immediatelevel = g_strdup(level);
-
-	emit_property_changed(conn, path, PROXIMITY_INTERFACE,
-					"ImmediateAlertLevel",
-					DBUS_TYPE_STRING, &level);
 
 	return dbus_message_new_method_return(msg);
 }
@@ -445,6 +452,7 @@ static void monitor_destroy(gpointer user_data)
 	if (monitor->attrib)
 		g_attrib_unref(monitor->attrib);
 
+	dbus_connection_unref(monitor->conn);
 	btd_device_unref(monitor->device);
 	g_free(monitor->linkloss);
 	g_free(monitor->immediate);
@@ -471,6 +479,7 @@ int monitor_register(DBusConnection *conn, struct btd_device *device,
 
 	monitor = g_new0(struct monitor, 1);
 	monitor->device = btd_device_ref(device);
+	monitor->conn = dbus_connection_ref(conn);
 	monitor->linklosslevel = (level ? : g_strdup("none"));
 	monitor->signallevel = g_strdup("unknown");
 
