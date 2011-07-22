@@ -221,6 +221,27 @@ static void read_tx_power(struct monitor *monitor)
 				&uuid, tx_power_handle_cb, monitor);
 }
 
+static void immediate_written(gpointer user_data)
+{
+	struct monitor *monitor = user_data;
+	const char *path = device_get_path(monitor->device);
+
+	g_free(monitor->fallbacklevel);
+	monitor->fallbacklevel = NULL;
+
+	emit_property_changed(monitor->conn, path, PROXIMITY_INTERFACE,
+				"ImmediateAlertLevel",
+				DBUS_TYPE_STRING, &monitor->immediatelevel);
+}
+
+static void write_immediate_alert(struct monitor *monitor)
+{
+	uint8_t value = str2level(monitor->immediatelevel);
+
+	gatt_write_cmd(monitor->attrib, monitor->immediatehandle, &value, 1,
+							immediate_written, monitor);
+}
+
 static void immediate_handle_cb(GSList *characteristics, guint8 status,
 							gpointer user_data)
 {
@@ -237,6 +258,9 @@ static void immediate_handle_cb(GSList *characteristics, guint8 status,
 	monitor->immediatehandle = chr->value_handle;
 
 	DBG("Immediate Alert handle: 0x%04x", monitor->immediatehandle);
+
+	if (monitor->fallbacklevel)
+		write_immediate_alert(monitor);
 }
 
 static void discover_immediate_handle(struct monitor *monitor)
@@ -248,27 +272,6 @@ static void discover_immediate_handle(struct monitor *monitor)
 
 	gatt_discover_char(monitor->attrib, immediate->start, immediate->end,
 					&uuid, immediate_handle_cb, monitor);
-}
-
-static void immediate_written(gpointer user_data)
-{
-	struct monitor *monitor = user_data;
-	const gchar *path = device_get_path(monitor->device);
-
-	g_free(monitor->fallbacklevel);
-	monitor->fallbacklevel = NULL;
-
-	emit_property_changed(monitor->conn, path, PROXIMITY_INTERFACE,
-				"ImmediateAlertLevel",
-				DBUS_TYPE_STRING, &monitor->immediatelevel);
-}
-
-static void write_immediate_alert(struct monitor *monitor)
-{
-	uint8_t value = str2level(monitor->immediatelevel);
-
-	gatt_write_cmd(monitor->attrib, monitor->immediatehandle, &value, 1,
-							immediate_written, monitor);
 }
 
 static void attio_connected_cb(GAttrib *attrib, gpointer user_data)
