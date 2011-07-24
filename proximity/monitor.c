@@ -354,6 +354,16 @@ static DBusMessage *set_immediate_alert(DBusConnection *conn, DBusMessage *msg,
 
 	monitor->immediatelevel = g_strdup(level);
 
+	/*
+	 * Means that Link/Path Loss are disabled or there is a pending
+	 * writting for Find Me(Immendiate alert) already.
+	 */
+	if (monitor->attioid == 0)
+		monitor->attioid = btd_device_add_attio_callback(monitor->device,
+							attio_connected_cb,
+							attio_disconnected_cb,
+							monitor);
+
 	return dbus_message_new_method_return(msg);
 }
 
