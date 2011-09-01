@@ -1613,6 +1613,9 @@ static void attio_disconnected(gpointer data, gpointer user_data)
 		attio->dcfunc(attio->user_data);
 }
 
+static gboolean att_connect(gpointer user_data);
+static void att_connect_dispatched(gpointer user_data);
+
 static void attrib_disconnected(gpointer user_data)
 {
 	struct btd_device *device = user_data;
@@ -1622,6 +1625,14 @@ static void attrib_disconnected(gpointer user_data)
 	attrib_channel_detach(device->attachid);
 	g_attrib_unref(device->attrib);
 	device->attrib = NULL;
+
+	if (device->auto_connect == FALSE)
+		return;
+
+	device->auto_id = g_timeout_add_seconds_full(G_PRIORITY_DEFAULT_IDLE,
+						AUTO_CONNECTION_INTERVAL,
+						att_connect, device,
+						att_connect_dispatched);
 }
 
 static void primary_cb(GSList *services, guint8 status, gpointer user_data)
@@ -1676,8 +1687,6 @@ done:
 	device->browse = NULL;
 	browse_request_free(req, shutdown);
 }
-
-static gboolean att_connect(gpointer user_data);
 
 static void att_connect_dispatched(gpointer user_data)
 {
