@@ -1619,6 +1619,14 @@ static void att_connect_dispatched(gpointer user_data);
 static void attrib_disconnected(gpointer user_data)
 {
 	struct btd_device *device = user_data;
+	GIOChannel *io;
+	int sock, err = 0;
+	socklen_t len;
+
+	io = g_attrib_get_channel(device->attrib);
+	sock = g_io_channel_unix_get_fd(io);
+	len = sizeof(err);
+	getsockopt(sock, SOL_SOCKET, SO_ERROR, &err, &len);
 
 	g_slist_foreach(device->attios, attio_disconnected, NULL);
 
@@ -1627,6 +1635,9 @@ static void attrib_disconnected(gpointer user_data)
 	device->attrib = NULL;
 
 	if (device->auto_connect == FALSE)
+		return;
+
+	if (err != ETIMEDOUT)
 		return;
 
 	device->auto_id = g_timeout_add_seconds_full(G_PRIORITY_DEFAULT_IDLE,
